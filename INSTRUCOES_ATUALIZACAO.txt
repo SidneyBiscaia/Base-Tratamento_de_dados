@@ -1,0 +1,32 @@
+DATA ENGINE V4 — PACOTE DE ATUALIZAÇÃO
+
+Este pacote é um overlay do projeto Dashboard Contábil Multiempresa. Não contém o aplicativo-base nem os históricos pesados de execução, para preservar os dados e o histórico que já existem no computador.
+
+ANTES DE INSTALAR
+1. Feche o Data Engine.
+2. Faça uma cópia de segurança da pasta atual: data/projects/dashboard-contabil-multiempresa-2026.
+3. Extraia o ZIP na pasta raiz do Data Engine, mantendo a estrutura de diretórios.
+4. Autorize a substituição de project.json e dos arquivos .py em codigo_fonte.
+5. Não apague a pasta runs nem inputs: elas devem continuar sendo as pastas da instalação atual.
+6. Abra o Data Engine e confira os caminhos das três entradas no editor do projeto. Os caminhos gravados no projeto original são específicos do computador em que foi criado.
+7. Execute uma validação completa e confira os totais, principalmente a auditoria vendas_sem_uf_ou_uf_invalida.
+
+O arquivo backup_versao_anterior/project.json.v3 contém uma cópia da configuração ativa anterior para rollback. Para reverter, restaure esse arquivo como project.json e restaure também os códigos-fonte do backup local feito antes da atualização.
+
+ALTERAÇÕES V4
+- Entradas Excel passam a iterar com itertuples em vez de iterrows.
+- Processamento elimina a serialização JSON por lançamento para deduplicação.
+- Métricas de gráficos são calculadas uma vez no processamento: UF, dia, cliente, documentos, tickets e faixas.
+- A saída usa os indicadores preparados, sem reprocessar os lançamentos para desenhar gráficos.
+- UF é normalizada por sigla ou nome completo; valores ausentes/inválidos são contabilizados na auditoria.
+- CNPJ passa para a base mensal e para o cadastro da empresa.
+- codigo_fonte é sincronizada com o project.json ativo.
+
+TESTES EXECUTADOS NESTE PACOTE
+- Sintaxe Python das três entradas, processamento e saída: aprovada.
+- Teste sintético com empresa código 0024/24, duas vendas em UFs PR e SP, faturamento e imposto: aprovado.
+- Geração de dashboard geral e individual no teste: aprovada.
+- Verificação de sintaxe JavaScript do HTML gerado: aprovada.
+
+VALIDAÇÃO PENDENTE NO COMPUTADOR DE ORIGEM
+Não foi possível reexecutar os arquivos originais das pastas Windows porque esses diretórios são locais ao seu computador. Portanto, antes de adotar a V4 oficialmente, compare os totais da primeira execução com a versão anterior. O mapa também depende do carregamento do GeoJSON externo e da presença de UF válida na fonte Vendas.

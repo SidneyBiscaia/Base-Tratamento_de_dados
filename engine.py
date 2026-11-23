@@ -66,6 +66,101 @@ def add_uploaded_files(project_id: str, input_id: str, files) -> list[str]:
             stored.append(str(target))
     return stored
 
+
+def delete_project(project_id: str) -> None:
+    """Remove permanentemente um projeto e seus arquivos locais."""
+    folder = project_path(project_id).resolve()
+    root = PROJECTS_DIR.resolve()
+    if folder.parent != root or not (folder / "project.json").is_file():
+        raise ValueError("Projeto inválido ou não encontrado.")
+    shutil.rmtree(folder)
+
+def export_project(project_id: str) -> bytes:
+    """Gera pacote portátil com configuração, códigos e arquivos de apoio do projeto."""
+    folder = project_path(project_id)
+    config = load_config(project_id)
+    import io
+    buffer = io.BytesIO()
+    manifest = {"format": "data-engine-project", "format_version": 1, "name": config.get("name", project_id),
+                "description": "Pacote portátil de projeto Data Engine. Os caminhos locais devem ser ajustados no computador de destino."}
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+        portable = dict(config)
+        portable["inputs"] = []
+        for idx, item in enumerate(config.get("inputs", []), 1):
+            entry = dict(item)
+            code_path = f"codes/entradas/entrada_{idx}.py"
+            zf.writestr(code_path, item.get("code", ""))
+            entry["code_file"] = code_path
+            entry["paths"] = []
+            entry.pop("code", None)
+            portable["inputs"].append(entry)
+        for key, code_path in (("process_code", "codes/processamento.py"), ("output_code", "codes/saida.py")):
+            zf.writestr(code_path, config.get(key, ""))
+            portable[key + "_file"] = code_path
+            portable[key] = ""
+        zf.writestr("project.json", json.dumps(portable, ensure_ascii=False, indent=2))
+        readme = ("PACOTE DE PROJETO DATA ENGINE\n\nImporte este ZIP pela seção Projetos > Importar pacote.\n"
+                  "Os códigos são preservados. Caminhos de arquivos do computador de origem não são incluídos; configure-os após importar.\n"
+                  "Revise os códigos antes de executar, pois scripts Python rodam com as permissões da aplicação.\n")
+        zf.writestr("LEIA-ME.txt", readme)
+    return buffer.getvalue()
+
+def import_project_package(uploaded_file) -> str:
+    """Importa pacote Data Engine ZIP ou ZIP contendo project.json compatível."""
+    import io
+    raw = uploaded_file.getvalue() if hasattr(uploaded_file, "getvalue") else bytes(uploaded_file)
+    if len(raw) > 50 * 1024 * 1024:
+        raise ValueError("O pacote excede o limite de 50 MB.")
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(raw))
+    except zipfile.BadZipFile as exc:
+        raise ValueError("Arquivo inválido. Envie um pacote ZIP do Data Engine.") from exc
+    with zf:
+        names = zf.namelist()
+        if len(names) > 2000:
+            raise ValueError("O pacote contém arquivos demais.")
+        safe = {}
+        for name in names:
+            p = Path(name)
+            if p.is_absolute() or ".." in p.parts:
+                raise ValueError("O pacote contém caminho inseguro e não pode ser importado.")
+            if not name.endswith("/"):
+                safe[name] = zf.read(name)
+        project_name = next((n for n in safe if n == "project.json" or n.endswith("/project.json")), None)
+        if not project_name:
+            raise ValueError("Não encontrei project.json no pacote.")
+        cfg = json.loads(safe[project_name].decode("utf-8-sig"))
+        if not isinstance(cfg, dict) or not isinstance(cfg.get("inputs", []), list):
+            raise ValueError("A configuração do projeto está em formato inválido.")
+        base = project_name.rsplit("/", 1)[0] if "/" in project_name else ""
+        def read_code(key, default=""):
+            rel = cfg.pop(key + "_file", "")
+            if not rel:
+                return cfg.get(key, default)
+            candidate = f"{base}/{rel}" if base and rel not in safe else rel
+            if candidate not in safe and rel in safe: candidate = rel
+            if candidate not in safe: raise ValueError(f"Arquivo de código ausente no pacote: {rel}")
+            return safe[candidate].decode("utf-8-sig")
+        for item in cfg.get("inputs", []):
+            rel = item.pop("code_file", "")
+            if rel:
+                candidate = f"{base}/{rel}" if base and rel not in safe else rel
+                if candidate not in safe and rel in safe: candidate = rel
+                if candidate not in safe: raise ValueError(f"Código de entrada ausente: {rel}")
+                item["code"] = safe[candidate].decode("utf-8-sig")
+            item.setdefault("code", "")
+            item["paths"] = []
+            item.setdefault("id", f"entrada-{uuid.uuid4().hex[:6]}")
+        cfg["process_code"] = read_code("process_code")
+        cfg["output_code"] = read_code("output_code")
+        for key, value in DEFAULT_CONFIG.items(): cfg.setdefault(key, value)
+        name = str(cfg.get("name") or "Projeto importado").strip()
+        new_id = create_project(name)
+        save_config(new_id, cfg)
+        return new_id
+
+
 def ensure_demo_project() -> None:
     examples = [p for p in list_projects() if p["id"].startswith("exemplo-organizar-csv-")]
     project_id = examples[0]["id"] if examples else create_project("Exemplo Organizar CSV")

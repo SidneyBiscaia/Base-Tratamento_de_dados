@@ -120,10 +120,33 @@ with st.sidebar:
         project_id = engine.create_project(name)
         st.session_state["selected_project"] = project_id
         st.rerun()
+    st.divider()
+    st.markdown("**Biblioteca de projetos**")
+    package = st.file_uploader("Importar pacote de projeto (.zip)", type=["zip"], key="import-project-package")
+    if package and st.button("Importar projeto", key="confirm-import-project", use_container_width=True):
+        try:
+            imported_id = engine.import_project_package(package)
+            st.session_state["selected_project"] = imported_id
+            st.success("Projeto importado.")
+            st.rerun()
+        except Exception as exc:
+            st.error(f"Não foi possível importar: {exc}")
+    if project_id:
+        export_bytes = engine.export_project(project_id)
+        st.download_button("Exportar projeto selecionado", export_bytes, file_name=f"{engine.slug(engine.load_config(project_id).get('name', 'projeto'))}.zip", mime="application/zip", use_container_width=True)
+        st.checkbox("Confirmo que desejo excluir este projeto e seus arquivos", key=f"confirm-delete-{project_id}")
+        if st.button("Excluir projeto selecionado", key=f"delete-project-{project_id}", use_container_width=True):
+            if st.session_state.get(f"confirm-delete-{project_id}"):
+                engine.delete_project(project_id)
+                st.session_state.pop("selected_project", None)
+                st.success("Projeto excluído.")
+                st.rerun()
+            else:
+                st.warning("Marque a confirmação antes de excluir.")
     if web_mode:
-        st.caption("Modo web: arquivos enviados são usados somente na execução atual; os códigos e configurações ficam no projeto.")
+        st.caption("Modo web: arquivos enviados são temporários por execução; os projetos e códigos ficam no armazenamento da aplicação.")
     else:
-        st.caption("Os projetos e arquivos ficam neste computador.")
+        st.caption("Os projetos, códigos e arquivos ficam neste computador.")
 
 if not project_id:
     st.info("Crie um projeto para começar.")
@@ -178,7 +201,14 @@ with inputs_tab:
                 if web_mode:
                     st.caption("Os arquivos selecionados serão usados somente nesta execução. Envie novamente na próxima rodada.")
             with code_col:
-                item["code"] = st.text_area("Código Python desta entrada", value=item.get("code", ""), height=310, key=f"code-{project_id}-{input_key}", help="O motor entrega `files`, uma lista de objetos Path, e espera que o código defina `result`.", on_change=save_widget_state, args=(project_id,))
+                script = st.file_uploader("Carregar script Python (.py)", type=["py"], key=f"script-input-{project_id}-{input_key}")
+                if script is not None and st.button("Inserir script nesta entrada", key=f"apply-script-{project_id}-{input_key}"):
+                    item["code"] = script.getvalue().decode("utf-8-sig")
+                    engine.save_config(project_id, config)
+                    st.session_state[f"code-{project_id}-{input_key}"] = item["code"]
+                    st.rerun()
+                with st.expander("Código Python da entrada (clique para exibir ou editar)", expanded=False):
+                    item["code"] = st.text_area("Código Python desta entrada", value=item.get("code", ""), height=310, key=f"code-{project_id}-{input_key}", help="O motor entrega `files`, uma lista de objetos Path, e espera que o código defina `result`.", on_change=save_widget_state, args=(project_id,))
             if st.button("Excluir esta entrada", key=f"delete-{project_id}-{input_key}"):
                 config["inputs"].pop(i)
                 engine.save_config(project_id, config)
@@ -193,10 +223,24 @@ with process_tab:
     st.subheader("Processamento geral opcional")
     st.caption("Os resultados das entradas selecionadas chegam em `inputs`, organizados pelo nome de cada entrada. Entradas desmarcadas não estarão disponíveis nesta execução.")
     st.caption("A seleção de entradas não pula esta etapa: o processamento é executado normalmente com as entradas marcadas. Defina `result` com os dados preparados.")
-    config["process_code"] = st.text_area("Código de processamento", value=config.get("process_code", ""), height=240, key=f"process-{project_id}", on_change=save_widget_state, args=(project_id,))
+    process_script = st.file_uploader("Carregar script de processamento (.py)", type=["py"], key=f"process-script-{project_id}")
+    if process_script is not None and st.button("Inserir script de processamento", key=f"apply-process-script-{project_id}"):
+        config["process_code"] = process_script.getvalue().decode("utf-8-sig")
+        engine.save_config(project_id, config)
+        st.session_state[f"process-{project_id}"] = config["process_code"]
+        st.rerun()
+    with st.expander("Código de processamento (clique para exibir ou editar)", expanded=False):
+        config["process_code"] = st.text_area("Código de processamento", value=config.get("process_code", ""), height=240, key=f"process-{project_id}", on_change=save_widget_state, args=(project_id,))
     st.subheader("Saída")
     st.caption("A variável `data` contém os dados preparados. `output_dir` é uma pasta Path para os arquivos finais.")
-    config["output_code"] = st.text_area("Código para gerar os arquivos finais", value=config.get("output_code", ""), height=220, key=f"output-{project_id}", on_change=save_widget_state, args=(project_id,))
+    output_script = st.file_uploader("Carregar script de saída (.py)", type=["py"], key=f"output-script-{project_id}")
+    if output_script is not None and st.button("Inserir script de saída", key=f"apply-output-script-{project_id}"):
+        config["output_code"] = output_script.getvalue().decode("utf-8-sig")
+        engine.save_config(project_id, config)
+        st.session_state[f"output-{project_id}"] = config["output_code"]
+        st.rerun()
+    with st.expander("Código de saída (clique para exibir ou editar)", expanded=False):
+        config["output_code"] = st.text_area("Código para gerar os arquivos finais", value=config.get("output_code", ""), height=220, key=f"output-{project_id}", on_change=save_widget_state, args=(project_id,))
     if not config["output_code"].strip():
         st.info("Sem código de saída, o Data Engine guarda os dados preparados em um arquivo dados.json.")
     if not web_mode:
@@ -218,8 +262,8 @@ with history_tab:
 with about_tab:
     st.subheader("Sobre o Data Engine")
     st.write(
-        "O Data Engine é uma estrutura reutilizável para ler arquivos, preparar dados e gerar os resultados que você precisa. "
-        "O aplicativo não traz regras prontas para cada banco ou empresa: você descreve o objetivo e usa códigos próprios em cada projeto."
+        "O Data Engine organiza projetos reutilizáveis para ler arquivos, preparar dados e gerar resultados. "
+        "Você pode criar projetos, importar e exportar pacotes ZIP, excluir projetos antigos e reutilizar seus códigos em outros trabalhos."
     )
 
     st.markdown("#### Como funciona")
@@ -228,7 +272,8 @@ with about_tab:
         "Se houver leiautes diferentes, como extratos de bancos diferentes, crie uma entrada para cada leiaute.\n"
         "2. **Seleção da execução:** marque as entradas que quer usar. As desmarcadas são ignoradas nessa rodada.\n"
         "3. **Processamento:** combine as entradas selecionadas quando necessário. Pode ficar vazio se uma entrada já prepara tudo.\n"
-        "4. **Saída:** gere o arquivo final, como CSV, Excel, PDF ou OFX, com o código de saída."
+        "4. **Saída:** gere o arquivo final, como CSV, Excel, PDF ou OFX, com o código de saída.\n"
+        "5. **Biblioteca:** importe ou exporte um pacote ZIP para transportar um projeto completo entre instalações; exclua projetos que não precisar mais."
     )
     st.info(
         "Marcar uma entrada executa o fluxo completo para ela: o código de leitura, o processamento configurado e a saída. "
@@ -252,7 +297,8 @@ with about_tab:
     st.write(
         "Explique quais arquivos você tem, como estão organizados, o que quer fazer com eles, "
         "as regras que devem ser seguidas e qual arquivo final espera. Inclua exemplos dos campos e diga como pretende conferir o resultado. "
-        "Anexe o Manual para IA: ele explica as variáveis disponíveis, a seleção de entradas e onde cada código deve ser colado."
+        "Anexe o Manual para IA: ele explica as variáveis disponíveis, a seleção de entradas e o formato obrigatório do ZIP importável. "
+        "Sempre que possível, peça à IA um pacote completo com manifest.json, project.json e os scripts de cada etapa, pronto para importar."
     )
 
     documentation_dir = Path(__file__).resolve().parent / "documentacao"

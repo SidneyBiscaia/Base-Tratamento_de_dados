@@ -1,0 +1,30 @@
+DATA ENGINE — ATUALIZAÇÃO DA APLICAÇÃO (GERENCIAMENTO DE PROJETOS)
+
+O QUE MUDA
+1. Importar pacote ZIP de projeto pronto (entradas, processamento e saída).
+2. Exportar o projeto selecionado em ZIP portátil.
+3. Excluir projetos pela interface, com confirmação.
+4. Carregar scripts .py nas etapas Entrada, Processamento e Saída, ou continuar colando/ editando o código.
+5. Blocos de código recolhidos por padrão para deixar a interface mais limpa.
+6. Manual atualizado com instruções de uso e contrato do pacote ZIP para IA.
+
+INSTALAÇÃO
+1. Feche o Data Engine.
+2. Faça uma cópia de segurança da pasta atual do aplicativo, especialmente app.py, engine.py, documentacao/ e data/projects/.
+3. Extraia este pacote na pasta raiz do Data Engine, preservando as pastas.
+4. Quando o Windows perguntar, substitua app.py e engine.py e atualize os arquivos de documentacao.
+5. Não apague nem substitua a pasta data/projects: ela contém seus projetos e históricos.
+6. Inicie novamente o aplicativo pelo comando habitual.
+
+FORMATO DE PACOTE DE PROJETO
+A IA deve entregar um ZIP com manifest.json, project.json e scripts .py referenciados. Caminhos locais devem ser deixados vazios para configuração após a importação. Veja o Manual de Integração com IA atualizado.
+
+VALIDAÇÃO RECOMENDADA
+- Abra um projeto existente e confira entradas, processamento e saída.
+- Exporte esse projeto e importe o ZIP gerado com outro nome se necessário.
+- Confira os códigos importados antes de executar.
+- Teste o upload de um .py em cada tipo de etapa.
+- Exclua apenas um projeto de teste, após marcar a confirmação.
+
+SEGURANÇA
+Projetos excluídos não têm lixeira nesta versão. Faça exportação/backup antes de excluir. Scripts Python importados podem acessar arquivos e recursos com as permissões do aplicativo; revise-os antes de executar.
